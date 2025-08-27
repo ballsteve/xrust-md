@@ -1,0 +1,229 @@
+//! A markdown parser for Xrust
+
+use std::rc::Rc;
+use xrust::xdmerror::{Error, ErrorKind};
+use xrust::value::Value;
+use xrust::item::Node;
+use xrust::trees::smite::RNode;
+use xrust::parser::{ParseError, ParseInput, ParserState};
+use xrust::parser::combinators::map::map;
+use xrust::parser::combinators::alt::{alt2, alt4};
+use xrust::parser::combinators::many::{many0, many1};
+use xrust::parser::combinators::list::separated_list0;
+use xrust::parser::combinators::tag::tag;
+use xrust::parser::combinators::tuple::tuple3;
+use xrust::parser::combinators::whitespace::whitespace0;
+
+pub fn parse(input: &str) -> Result<RNode, Error> {
+    let mut d = RNode::new_document();
+    if input.is_empty() {
+	return Ok(d)
+    }
+    let state = ParserState::new(Some(d.clone()), None, None);
+    match md_expr((input.trim(), state)) {
+	Ok((_, n)) => {
+	    d.push(n)?;
+	    Ok(d)
+	}
+	Err(e) => match e {
+	    ParseError::Combinator => Err(Error::new(ErrorKind::ParseError, String::from("unrecoverable parse error"))),
+	    ParseError::NotWellFormed(f) => Err(Error::new(ErrorKind::ParseError, format!("unrecognised extra characters \"{}\"", f))),
+	    _ => Err(Error::new(ErrorKind::Unknown, String::from("unknown error"))),
+	}
+    }
+}
+
+fn md_expr<N: Node>(input: ParseInput<N>) -> Result<(ParseInput<N>, N), ParseError> {
+    match document()(input) {
+	Err(e) => Err(e),
+	Ok(((input1, state1), n)) => {
+	    if input1.is_empty() {
+		Ok(((input1, state1), n))
+	    } else {
+		Err(ParseError::NotWellFormed(input1.to_string()))
+	    }
+	}
+    }
+}
+
+fn document<N: Node>() -> impl Fn(ParseInput<N>) -> Result<(ParseInput<N>, N), ParseError> {
+    move |input| {
+	match separated_list0(
+	    map(many1(tag("\n")), |_| ()),
+	    block(),
+	)(input) {
+	    Ok(((input1, state1), v)) => {
+		let mut doc = state1.doc().unwrap();
+		let mut top = doc.new_element(state1.get_qualified_name(None, None, state1.get_value("article".to_string())))
+		    .expect("unable to create element");
+		v.iter().for_each(|c| top.push(c.clone()).expect("unable to add node"));
+		doc.push(top.clone()).expect("unable to add node");
+		Ok(((input1, state1.clone()), top))
+	    }
+	    Err(err) => Err(err),
+	}
+    }
+}
+
+fn block<N: Node>() -> impl Fn(ParseInput<N>) -> Result<(ParseInput<N>, N), ParseError> {
+    alt2(heading(), para())
+}
+
+fn heading<N: Node>() -> impl Fn(ParseInput<N>) -> Result<(ParseInput<N>, N), ParseError> {
+    alt2(heading2(), heading1())
+}
+
+fn heading1<N: Node>() -> impl Fn(ParseInput<N>) -> Result<(ParseInput<N>, N), ParseError> {
+    move |input| {
+	match tuple3(tag("#"), whitespace0(), phrases())(input) {
+	    Ok(((input1, state1), (_, _, v))) => {
+		let mut h = state1.doc().unwrap().new_element(state1.get_qualified_name(None, None, state1.get_value("sect1".to_string())))
+		    .expect("unable to create element");
+
+		v.iter().for_each(|c| h.push(c.clone()).expect("unable to add node"));
+		Ok(((input1, state1), h))
+	    }
+	    Err(err) => Err(err),
+	}
+    }
+}
+fn heading2<N: Node>() -> impl Fn(ParseInput<N>) -> Result<(ParseInput<N>, N), ParseError> {
+    move |input| {
+	match tuple3(tag("##"), whitespace0(), phrases())(input) {
+	    Ok(((input1, state1), (_, _, v))) => {
+		let mut h = state1.doc().unwrap().new_element(state1.get_qualified_name(None, None, state1.get_value( "sect2".to_string())))
+		    .expect("unable to create element");
+		v.iter().for_each(|c| h.push(c.clone()).expect("unable to add node"));
+		Ok(((input1, state1), h))
+	    }
+	    Err(err) => Err(err),
+	}
+    }
+}
+
+fn strong<N: Node>() -> impl Fn(ParseInput<N>) -> Result<(ParseInput<N>, N), ParseError> {
+    move |input| {
+	match tuple3(
+	    tag("**"),
+	    map(many0(none_of("*")), |v| v.iter().collect::<String>()),
+	    tag("**"),
+	)(input) {
+	    Ok(((input1, state1), (_, c, _))) => {
+		let mut s = state1.doc().unwrap().new_element(state1.get_qualified_name(None, None, state1.get_value("emph".to_string())))
+		    .expect("unable to create element");
+		let att = state1.doc().unwrap().new_attribute(
+		    state1.get_qualified_name(None, None, state1.get_value("role".to_string())),
+		    state1.get_value("strong".to_string())
+		).expect("unable to create attribute");
+		s.add_attribute(att).expect("unable to add attribute");
+		let content = state1.doc().unwrap().new_text(Rc::new(Value::from(c)))
+		    .expect("unable to create text node");
+		s.push(content).expect("unable to add node");
+		Ok(((input1, state1), s))
+	    }
+	    Err(err) => Err(err),
+	}
+    }
+}
+fn underline<N: Node>() -> impl Fn(ParseInput<N>) -> Result<(ParseInput<N>, N), ParseError> {
+    move |input| {
+	match tuple3(
+	    tag("__"),
+	    map(many1(none_of("_")), |v| v.iter().collect::<String>()),
+	    tag("__"),
+	)(input) {
+	    Ok(((input1, state1), (_, c, _))) => {
+		let mut s = state1.doc().unwrap().new_element(state1.get_qualified_name(None, None, state1.get_value("emph".to_string())))
+		    .expect("unable to create element");
+		let att = state1.doc().unwrap().new_attribute(
+		    state1.get_qualified_name(None, None, state1.get_value("role".to_string())),
+		    state1.get_value("underline".to_string())
+		).expect("unable to create attribute");
+		s.add_attribute(att).expect("unable to add attribute");
+		let content = state1.doc().unwrap().new_text(Rc::new(Value::from(c)))
+		    .expect("unable to create text node");
+		s.push(content).expect("unable to add text node");
+		Ok(((input1, state1), s))
+	    }
+	    Err(err) => Err(err),
+	}
+    }
+}
+fn emphasis<N: Node>() -> impl Fn(ParseInput<N>) -> Result<(ParseInput<N>, N), ParseError> {
+    move |input| {
+	match tuple3(
+	    tag("//"),
+	    map(many1(none_of("/")), |v| v.iter().collect::<String>()),
+	    tag("//"),
+	)(input) {
+	    Ok(((input1, state1), (_, c, _))) => {
+		let mut s = state1.doc().unwrap().new_element(state1.get_qualified_name(None, None, state1.get_value("emph".to_string())))
+		    .expect("unable to create element");
+		let content = state1.doc().unwrap().new_text(Rc::new(Value::from(c)))
+		    .expect("unable to create text node");
+		s.push(content).expect("unable to add text node");
+		Ok(((input1, state1), s))
+	    }
+	    Err(err) => Err(err),
+	}
+    }
+}
+fn phrases<N: Node>() -> impl Fn(ParseInput<N>) -> Result<(ParseInput<N>, Vec<N>), ParseError> {
+    many1(alt4(
+	    text_content(),
+	    strong(),
+	    emphasis(),
+	    underline(),
+	))
+}
+
+fn text_content<N: Node>() -> impl Fn(ParseInput<N>) -> Result<(ParseInput<N>, N), ParseError> {
+    move |input| {
+	match map(many1(none_of("*/_\n")), |v| v.iter().collect::<String>())(input) {
+	    Ok(((input1, state1), t)) => {
+		let p = state1.doc().unwrap().new_text(Rc::new(Value::from(t)))
+		    .expect("unable to create text node");
+		Ok(((input1, state1), p))
+	    }
+	    Err(err) => Err(err),
+	}
+    }
+}
+
+fn para<N: Node>() -> impl Fn(ParseInput<N>) -> Result<(ParseInput<N>, N), ParseError> {
+    move |input| {
+	match phrases()(input) {
+	    Ok(((input1, state1), v)) => {
+		let mut p = state1.doc().unwrap().new_element(state1.get_qualified_name(None, None, state1.get_value("para".to_string())))
+		    .expect("unable to create element");
+		v.iter().for_each(|c| p.push(c.clone()).expect("unable to add node"));
+		Ok(((input1, state1), p))
+	    }
+	    Err(err) => Err(err),
+	}
+    }
+}
+
+#[allow(dead_code)]
+fn eol<N: Node>() -> impl Fn(ParseInput<N>) -> Result<(ParseInput<N>, ()), ParseError> {
+    map(
+	many1(tag("\n")),
+	|_| ())
+}
+
+// This is copied from xrust::parser::xpath::support
+// TODO: make it a public function exported by xrust
+fn none_of<N: Node>(s: &str) -> impl Fn(ParseInput<N>) -> Result<(ParseInput<N>, char), ParseError> + '_ {
+    move |(input, state)| {
+        if input.is_empty() {
+            Err(ParseError::Combinator)
+        } else {
+            let a = input.chars().next().unwrap();
+            match s.find(|b| a == b) {
+                Some(_) => Err(ParseError::Combinator),
+                None => Ok(((&input[1..], state), a)),
+            }
+        }
+    }
+}
+

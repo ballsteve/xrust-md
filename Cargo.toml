@@ -1,0 +1,7 @@
+[package]
+name = "xrust-md"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+xrust = "1.2.5"
