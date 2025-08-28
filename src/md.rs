@@ -17,31 +17,24 @@ use xrust::value::Value;
 use xrust::xdmerror::{Error, ErrorKind};
 
 pub fn parse(input: &str) -> Result<RNode, Error> {
-    let mut d = RNode::new_document();
+    let d = RNode::new_document();
     if input.is_empty() {
         return Ok(d);
     }
     let state = ParserState::new(Some(d.clone()), None, None);
-    match md_expr((input.trim(), state)) {
-        Ok((_, n)) => {
-            d.push(n)?;
-            Ok(d)
-        }
-        Err(e) => match e {
-            ParseError::Combinator => Err(Error::new(
+    md_expr((input.trim(), state))
+        .map(|_| d)
+        .map_err(|e| match e {
+            ParseError::Combinator => Error::new(
                 ErrorKind::ParseError,
                 String::from("unrecoverable parse error"),
-            )),
-            ParseError::NotWellFormed(f) => Err(Error::new(
+            ),
+            ParseError::NotWellFormed(f) => Error::new(
                 ErrorKind::ParseError,
                 format!("unrecognised extra characters \"{}\"", f),
-            )),
-            _ => Err(Error::new(
-                ErrorKind::Unknown,
-                String::from("unknown error"),
-            )),
-        },
-    }
+            ),
+            _ => Error::new(ErrorKind::Unknown, String::from("unknown error")),
+        })
 }
 
 fn md_expr<N: Node>(input: ParseInput<N>) -> Result<(ParseInput<N>, N), ParseError> {
@@ -307,7 +300,7 @@ Some __underlined__ text
         .expect("unable to parse MarkDown");
         assert_eq!(
             d.to_xml(),
-            "<article><heading1>Heading</heading1><para>A paragraph</para><heading2>Level 2</heading2><para>Some <emph role='strong'>strong</emph> text</para><heading1>Level 1</heading1><para>Some <emph role='underline'>underlined</emph> text</para><heading2>Another level 2</heading2><para><emph>Emphasised</emph> text</para>"
+            "<article><heading1>Heading</heading1><para>A paragraph</para><heading2>Level 2</heading2><para>Some <emph role='strong'>strong</emph> text</para><heading1>Level 1</heading1><para>Some <emph role='underline'>underlined</emph> text</para><heading2>Another Level 2</heading2><para><emph>Emphasised</emph> text</para></article>"
         )
     }
 }
