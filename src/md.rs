@@ -94,7 +94,7 @@ fn heading1<N: Node>() -> impl Fn(ParseInput<N>) -> Result<(ParseInput<N>, N), P
                 .new_element(state1.get_qualified_name(
                     None,
                     None,
-                    state1.get_value(&"sect1".to_string()),
+                    state1.get_value(&"heading1".to_string()),
                 ))
                 .expect("unable to create element");
 
@@ -114,7 +114,7 @@ fn heading2<N: Node>() -> impl Fn(ParseInput<N>) -> Result<(ParseInput<N>, N), P
                 .new_element(state1.get_qualified_name(
                     None,
                     None,
-                    state1.get_value(&"sect2".to_string()),
+                    state1.get_value(&"heading2".to_string()),
                 ))
                 .expect("unable to create element");
             v.iter()
@@ -296,12 +296,18 @@ mod tests {
     fn parse_1() {
         let d = parse(
             "# Heading
-A paragraph",
+A paragraph
+## Level 2
+Some **strong** text
+# Level 1
+Some __underlined__ text
+## Another Level 2
+//Emphasised// text",
         )
         .expect("unable to parse MarkDown");
         assert_eq!(
             d.to_xml(),
-            "<article><sect1><title>Heading</title><para>A paragraph</para></sect1></article>"
+            "<article><heading1>Heading</heading1><para>A paragraph</para><heading2>Level 2</heading2><para>Some <emph role='strong'>strong</emph> text</para><heading1>Level 1</heading1><para>Some <emph role='underline'>underlined</emph> text</para><heading2>Another level 2</heading2><para><emph>Emphasised</emph> text</para>"
         )
     }
 }
