@@ -1,6 +1,6 @@
 [package]
 name = "xrust-md"
-version = "0.1.0"
+version = "0.1.1"
 keywords = ["markdown", "xslt", "tree"]
 categories = ['parser-implementations']
 description = "Parse Markdown and produce a χrust tree"
