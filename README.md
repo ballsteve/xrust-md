@@ -13,6 +13,9 @@ Markdown is simply text with some embdded instructions.
 ### Headings
 
 A level 1 heading is denoted by a '#' at the beginning of the line.
+```
+# A Level 1 Heading
+```
 A level 2 heading is denoted by a '##' at the beginning of the line.
 
 ### Paragraphs
