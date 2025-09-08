@@ -25,7 +25,7 @@ A level 2 heading is denoted by a '##' at the beginning of the line.
 
 The end of the line starts a new paragraph.
 ```
-The firest paragraph.
+The first paragraph.
 Followed by another paragraph.
 ```
 
