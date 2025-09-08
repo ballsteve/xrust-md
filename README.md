@@ -17,16 +17,26 @@ A level 1 heading is denoted by a '#' at the beginning of the line.
 # A Level 1 Heading
 ```
 A level 2 heading is denoted by a '##' at the beginning of the line.
+```
+## A Level 2 Heading
+```
 
 ### Paragraphs
 
 The end of the line starts a new paragraph.
+```
+The firest paragraph.
+Followed by another paragraph.
+```
 
 ### Phrases
 
 For strong (bold) text surround the text with '**'.
 For underlined text surround the text with '__' (underscores).
 For emphasised (italic) text surround the texy with '//'.
+```
+The **strong** phrase followed by an __underlined__ phrase and then //italics// and then the end of the paragraph.
+```
 
 ## Usage
 
