@@ -75,40 +75,13 @@ fn block<N: Node>() -> impl Fn(ParseInput<N>) -> Result<(ParseInput<N>, N), Pars
 }
 
 fn heading<N: Node>() -> impl Fn(ParseInput<N>) -> Result<(ParseInput<N>, N), ParseError> {
-    alt2(heading2(), heading1())
-}
-
-fn heading1<N: Node>() -> impl Fn(ParseInput<N>) -> Result<(ParseInput<N>, N), ParseError> {
-    move |input| match tuple3(tag("#"), whitespace0(), phrases())(input) {
-        Ok(((input1, state1), (_, _, v))) => {
+    move |input| match tuple3(many1(tag("#")), whitespace0(), phrases())(input) {
+        Ok(((input1, state1), (h, _, v))) => {
+            let hd_name = format!("heading{}", h.len());
             let mut h = state1
                 .doc()
                 .unwrap()
-                .new_element(state1.get_qualified_name(
-                    None,
-                    None,
-                    state1.get_value(&"heading1".to_string()),
-                ))
-                .expect("unable to create element");
-
-            v.iter()
-                .for_each(|c| h.push(c.clone()).expect("unable to add node"));
-            Ok(((input1, state1), h))
-        }
-        Err(err) => Err(err),
-    }
-}
-fn heading2<N: Node>() -> impl Fn(ParseInput<N>) -> Result<(ParseInput<N>, N), ParseError> {
-    move |input| match tuple3(tag("##"), whitespace0(), phrases())(input) {
-        Ok(((input1, state1), (_, _, v))) => {
-            let mut h = state1
-                .doc()
-                .unwrap()
-                .new_element(state1.get_qualified_name(
-                    None,
-                    None,
-                    state1.get_value(&"heading2".to_string()),
-                ))
+                .new_element(state1.get_qualified_name(None, None, state1.get_value(&hd_name)))
                 .expect("unable to create element");
             v.iter()
                 .for_each(|c| h.push(c.clone()).expect("unable to add node"));
@@ -272,10 +245,17 @@ fn none_of<N: Node>(
         if input.is_empty() {
             Err(ParseError::Combinator)
         } else {
-            let a = input.chars().next().unwrap();
+            let mut ch_it = input.char_indices();
+            let (_, a) = ch_it.next().unwrap();
             match s.find(|b| a == b) {
                 Some(_) => Err(ParseError::Combinator),
-                None => Ok(((&input[1..], state), a)),
+                None => {
+                    if let Some((j, _)) = ch_it.next() {
+                        Ok(((&input[j..], state), a))
+                    } else {
+                        Ok((("", state), a))
+                    }
+                }
             }
         }
     }
@@ -301,6 +281,22 @@ Some __underlined__ text
         assert_eq!(
             d.to_xml(),
             "<article><heading1>Heading</heading1><para>A paragraph</para><heading2>Level 2</heading2><para>Some <emph role='strong'>strong</emph> text</para><heading1>Level 1</heading1><para>Some <emph role='underline'>underlined</emph> text</para><heading2>Another Level 2</heading2><para><emph>Emphasised</emph> text</para></article>"
+        )
+    }
+
+    #[test]
+    fn headings_1() {
+        let d = parse(
+            "# Level 1 Heading
+## Level 2 Heading
+### Level 3 Heading
+#### Level 4 Heading
+",
+        )
+        .expect("unable to parse MarkDown");
+        assert_eq!(
+            d.to_xml(),
+            "<article><heading1>Level 1 Heading</heading1><heading2>Level 2 Heading</heading2><heading3>Level 3 Heading</heading3><heading4>Level 4 Heading</heading4></article>"
         )
     }
 }

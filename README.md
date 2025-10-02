@@ -8,7 +8,7 @@ A parser for Markdown documents that creates a [χrust](https://gitlab.gnome.org
 
 ## Markdown Editing
 
-Markdown is simply text with some embdded instructions.
+Markdown is simply text with some embedded instructions.
 
 ### Headings
 
@@ -20,6 +20,8 @@ A level 2 heading is denoted by a '##' at the beginning of the line.
 ```
 ## A Level 2 Heading
 ```
+
+There is no limit to heading levels.
 
 ### Paragraphs
 
@@ -41,3 +43,12 @@ The **strong** phrase followed by an __underlined__ phrase and then //italics// 
 ## Usage
 
 This crate is used by [χrusty](https://gitlab.gnome.org/World/Rust/markup-rs/xrusty/) to support Markdown as a source document in a transformation.
+
+## Change Log
+
+| Release | Notes |
+|---------|-------|
+| 0.1.0   | Initial release |
+|---------|-------|
+| 0.2.0   | Unlimited heading levels |
+|---------|-------|
