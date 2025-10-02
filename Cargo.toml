@@ -1,6 +1,6 @@
 [package]
 name = "xrust-md"
-version = "0.1.1"
+version = "0.2.0"
 keywords = ["markdown", "xslt", "tree"]
 categories = ['parser-implementations']
 description = "Parse Markdown and produce a χrust tree"
@@ -12,4 +12,5 @@ readme = "README.md"
 edition = "2024"
 
 [dependencies]
-xrust = "1.2.5"
+xrust = "1.3.0"
+#xrust = { path = "../xrust" }
