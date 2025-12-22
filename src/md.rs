@@ -2,6 +2,7 @@
 
 #![allow(dead_code)]
 
+use qualname::{NamespacePrefix, NamespaceUri, NcName, QName};
 use std::rc::Rc;
 use xrust::item::Node;
 use xrust::parser::combinators::alt::{alt2, alt4};
@@ -11,7 +12,7 @@ use xrust::parser::combinators::map::map;
 use xrust::parser::combinators::tag::tag;
 use xrust::parser::combinators::tuple::tuple3;
 use xrust::parser::combinators::whitespace::whitespace0;
-use xrust::parser::{ParseError, ParseInput, ParserState};
+use xrust::parser::{ParseError, ParseInput, ParserStateBuilder, StaticState, StaticStateBuilder};
 use xrust::trees::smite::RNode;
 use xrust::value::Value;
 use xrust::xdmerror::{Error, ErrorKind};
@@ -21,11 +22,14 @@ pub fn parse(input: &str) -> Result<RNode, Error> {
     if input.is_empty() {
         return Ok(d);
     }
-    let state = ParserState::new(Some(d.clone()), None, None);
-    md_expr((input.trim(), state))
+    let state = ParserStateBuilder::new().doc(d.clone()).build();
+    let mut static_state = StaticStateBuilder::new()
+        .namespace(|_| Err(ParseError::Notimplemented))
+        .build();
+    md_expr((input.trim(), state), &mut static_state)
         .map(|_| d)
         .map_err(|e| match e {
-            ParseError::Combinator => Error::new(
+            ParseError::Combinator(_s) => Error::new(
                 ErrorKind::ParseError,
                 String::from("unrecoverable parse error"),
             ),
@@ -37,8 +41,14 @@ pub fn parse(input: &str) -> Result<RNode, Error> {
         })
 }
 
-fn md_expr<N: Node>(input: ParseInput<N>) -> Result<(ParseInput<N>, N), ParseError> {
-    match document()(input) {
+fn md_expr<'a, N: Node, L>(
+    input: ParseInput<'a, N>,
+    ss: &mut StaticState<L>,
+) -> Result<(ParseInput<'a, N>, N), ParseError>
+where
+    L: FnMut(&NamespacePrefix) -> Result<NamespaceUri, ParseError>,
+{
+    match document()(input, ss) {
         Err(e) => Err(e),
         Ok(((input1, state1), n)) => {
             if input1.is_empty() {
@@ -50,16 +60,16 @@ fn md_expr<N: Node>(input: ParseInput<N>) -> Result<(ParseInput<N>, N), ParseErr
     }
 }
 
-fn document<N: Node>() -> impl Fn(ParseInput<N>) -> Result<(ParseInput<N>, N), ParseError> {
-    move |input| match separated_list0(map(many1(tag("\n")), |_| ()), block())(input) {
+fn document<'a, N: Node, L>()
+-> impl Fn(ParseInput<'a, N>, &mut StaticState<L>) -> Result<(ParseInput<'a, N>, N), ParseError>
+where
+    L: FnMut(&NamespacePrefix) -> Result<NamespaceUri, ParseError>,
+{
+    move |input, ss| match separated_list0(map(many1(tag("\n")), |_| ()), block())(input, ss) {
         Ok(((input1, state1), v)) => {
             let mut doc = state1.doc().unwrap();
             let mut top = doc
-                .new_element(state1.get_qualified_name(
-                    None,
-                    None,
-                    state1.get_value(&"article".to_string()),
-                ))
+                .new_element(QName::from_local_name(NcName::try_from("article").unwrap()))
                 .expect("unable to create element");
             v.iter()
                 .for_each(|c| top.push(c.clone()).expect("unable to add node"));
@@ -70,18 +80,28 @@ fn document<N: Node>() -> impl Fn(ParseInput<N>) -> Result<(ParseInput<N>, N), P
     }
 }
 
-fn block<N: Node>() -> impl Fn(ParseInput<N>) -> Result<(ParseInput<N>, N), ParseError> {
+fn block<'a, N: Node, L>()
+-> impl Fn(ParseInput<'a, N>, &mut StaticState<L>) -> Result<(ParseInput<'a, N>, N), ParseError>
+where
+    L: FnMut(&NamespacePrefix) -> Result<NamespaceUri, ParseError>,
+{
     alt2(heading(), para())
 }
 
-fn heading<N: Node>() -> impl Fn(ParseInput<N>) -> Result<(ParseInput<N>, N), ParseError> {
-    move |input| match tuple3(many1(tag("#")), whitespace0(), phrases())(input) {
+fn heading<'a, N: Node, L>()
+-> impl Fn(ParseInput<'a, N>, &mut StaticState<L>) -> Result<(ParseInput<'a, N>, N), ParseError>
+where
+    L: FnMut(&NamespacePrefix) -> Result<NamespaceUri, ParseError>,
+{
+    move |input, ss| match tuple3(many1(tag("#")), whitespace0(), phrases())(input, ss) {
         Ok(((input1, state1), (h, _, v))) => {
             let hd_name = format!("heading{}", h.len());
             let mut h = state1
                 .doc()
                 .unwrap()
-                .new_element(state1.get_qualified_name(None, None, state1.get_value(&hd_name)))
+                .new_element(QName::from_local_name(
+                    NcName::try_from(hd_name.as_str()).unwrap(),
+                ))
                 .expect("unable to create element");
             v.iter()
                 .for_each(|c| h.push(c.clone()).expect("unable to add node"));
@@ -91,29 +111,29 @@ fn heading<N: Node>() -> impl Fn(ParseInput<N>) -> Result<(ParseInput<N>, N), Pa
     }
 }
 
-fn strong<N: Node>() -> impl Fn(ParseInput<N>) -> Result<(ParseInput<N>, N), ParseError> {
-    move |input| match tuple3(
+fn strong<'a, N: Node, L>()
+-> impl Fn(ParseInput<'a, N>, &mut StaticState<L>) -> Result<(ParseInput<'a, N>, N), ParseError>
+where
+    L: FnMut(&NamespacePrefix) -> Result<NamespaceUri, ParseError>,
+{
+    move |input, ss| match tuple3(
         tag("**"),
         map(many0(none_of("*")), |v| v.iter().collect::<String>()),
         tag("**"),
-    )(input)
+    )(input, ss)
     {
         Ok(((input1, state1), (_, c, _))) => {
             let mut s = state1
                 .doc()
                 .unwrap()
-                .new_element(state1.get_qualified_name(
-                    None,
-                    None,
-                    state1.get_value(&"emph".to_string()),
-                ))
+                .new_element(QName::from_local_name(NcName::try_from("emph").unwrap()))
                 .expect("unable to create element");
             let att = state1
                 .doc()
                 .unwrap()
                 .new_attribute(
-                    state1.get_qualified_name(None, None, state1.get_value(&"role".to_string())),
-                    state1.get_value(&"strong".to_string()),
+                    QName::from_local_name(NcName::try_from("role").unwrap()),
+                    Rc::new(Value::from("strong")),
                 )
                 .expect("unable to create attribute");
             s.add_attribute(att).expect("unable to add attribute");
@@ -128,29 +148,29 @@ fn strong<N: Node>() -> impl Fn(ParseInput<N>) -> Result<(ParseInput<N>, N), Par
         Err(err) => Err(err),
     }
 }
-fn underline<N: Node>() -> impl Fn(ParseInput<N>) -> Result<(ParseInput<N>, N), ParseError> {
-    move |input| match tuple3(
+fn underline<'a, N: Node, L>()
+-> impl Fn(ParseInput<'a, N>, &mut StaticState<L>) -> Result<(ParseInput<'a, N>, N), ParseError>
+where
+    L: FnMut(&NamespacePrefix) -> Result<NamespaceUri, ParseError>,
+{
+    move |input, ss| match tuple3(
         tag("__"),
         map(many1(none_of("_")), |v| v.iter().collect::<String>()),
         tag("__"),
-    )(input)
+    )(input, ss)
     {
         Ok(((input1, state1), (_, c, _))) => {
             let mut s = state1
                 .doc()
                 .unwrap()
-                .new_element(state1.get_qualified_name(
-                    None,
-                    None,
-                    state1.get_value(&"emph".to_string()),
-                ))
+                .new_element(QName::from_local_name(NcName::try_from("emph").unwrap()))
                 .expect("unable to create element");
             let att = state1
                 .doc()
                 .unwrap()
                 .new_attribute(
-                    state1.get_qualified_name(None, None, state1.get_value(&"role".to_string())),
-                    state1.get_value(&"underline".to_string()),
+                    QName::from_local_name(NcName::try_from("role").unwrap()),
+                    Rc::new(Value::from("underline")),
                 )
                 .expect("unable to create attribute");
             s.add_attribute(att).expect("unable to add attribute");
@@ -165,22 +185,22 @@ fn underline<N: Node>() -> impl Fn(ParseInput<N>) -> Result<(ParseInput<N>, N), 
         Err(err) => Err(err),
     }
 }
-fn emphasis<N: Node>() -> impl Fn(ParseInput<N>) -> Result<(ParseInput<N>, N), ParseError> {
-    move |input| match tuple3(
+fn emphasis<'a, N: Node, L>()
+-> impl Fn(ParseInput<'a, N>, &mut StaticState<L>) -> Result<(ParseInput<'a, N>, N), ParseError>
+where
+    L: FnMut(&NamespacePrefix) -> Result<NamespaceUri, ParseError>,
+{
+    move |input, ss| match tuple3(
         tag("//"),
         map(many1(none_of("/")), |v| v.iter().collect::<String>()),
         tag("//"),
-    )(input)
+    )(input, ss)
     {
         Ok(((input1, state1), (_, c, _))) => {
             let mut s = state1
                 .doc()
                 .unwrap()
-                .new_element(state1.get_qualified_name(
-                    None,
-                    None,
-                    state1.get_value(&"emph".to_string()),
-                ))
+                .new_element(QName::from_local_name(NcName::try_from("emph").unwrap()))
                 .expect("unable to create element");
             let content = state1
                 .doc()
@@ -193,12 +213,21 @@ fn emphasis<N: Node>() -> impl Fn(ParseInput<N>) -> Result<(ParseInput<N>, N), P
         Err(err) => Err(err),
     }
 }
-fn phrases<N: Node>() -> impl Fn(ParseInput<N>) -> Result<(ParseInput<N>, Vec<N>), ParseError> {
+fn phrases<'a, N: Node, L>()
+-> impl Fn(ParseInput<'a, N>, &mut StaticState<L>) -> Result<(ParseInput<'a, N>, Vec<N>), ParseError>
+where
+    L: FnMut(&NamespacePrefix) -> Result<NamespaceUri, ParseError>,
+{
     many1(alt4(text_content(), strong(), emphasis(), underline()))
 }
 
-fn text_content<N: Node>() -> impl Fn(ParseInput<N>) -> Result<(ParseInput<N>, N), ParseError> {
-    move |input| match map(many1(none_of("*/_\n")), |v| v.iter().collect::<String>())(input) {
+fn text_content<'a, N: Node, L>()
+-> impl Fn(ParseInput<'a, N>, &mut StaticState<L>) -> Result<(ParseInput<'a, N>, N), ParseError>
+where
+    L: FnMut(&NamespacePrefix) -> Result<NamespaceUri, ParseError>,
+{
+    move |input, ss| match map(many1(none_of("*/_\n")), |v| v.iter().collect::<String>())(input, ss)
+    {
         Ok(((input1, state1), t)) => {
             let p = state1
                 .doc()
@@ -211,17 +240,17 @@ fn text_content<N: Node>() -> impl Fn(ParseInput<N>) -> Result<(ParseInput<N>, N
     }
 }
 
-fn para<N: Node>() -> impl Fn(ParseInput<N>) -> Result<(ParseInput<N>, N), ParseError> {
-    move |input| match phrases()(input) {
+fn para<'a, N: Node, L>()
+-> impl Fn(ParseInput<'a, N>, &mut StaticState<L>) -> Result<(ParseInput<'a, N>, N), ParseError>
+where
+    L: FnMut(&NamespacePrefix) -> Result<NamespaceUri, ParseError>,
+{
+    move |input, ss| match phrases()(input, ss) {
         Ok(((input1, state1), v)) => {
             let mut p = state1
                 .doc()
                 .unwrap()
-                .new_element(state1.get_qualified_name(
-                    None,
-                    None,
-                    state1.get_value(&"para".to_string()),
-                ))
+                .new_element(QName::from_local_name(NcName::try_from("para").unwrap()))
                 .expect("unable to create element");
             v.iter()
                 .for_each(|c| p.push(c.clone()).expect("unable to add node"));
@@ -232,23 +261,30 @@ fn para<N: Node>() -> impl Fn(ParseInput<N>) -> Result<(ParseInput<N>, N), Parse
 }
 
 #[allow(dead_code)]
-fn eol<N: Node>() -> impl Fn(ParseInput<N>) -> Result<(ParseInput<N>, ()), ParseError> {
+fn eol<'a, N: Node, L>()
+-> impl Fn(ParseInput<'a, N>, &mut StaticState<L>) -> Result<(ParseInput<'a, N>, ()), ParseError>
+where
+    L: FnMut(&NamespacePrefix) -> Result<NamespaceUri, ParseError>,
+{
     map(many1(tag("\n")), |_| ())
 }
 
 // This is copied from xrust::parser::xpath::support
 // TODO: make it a public function exported by xrust
-fn none_of<N: Node>(
+fn none_of<'a, N: Node, L>(
     s: &str,
-) -> impl Fn(ParseInput<N>) -> Result<(ParseInput<N>, char), ParseError> + '_ {
-    move |(input, state)| {
+) -> impl Fn(ParseInput<'a, N>, &mut StaticState<L>) -> Result<(ParseInput<'a, N>, char), ParseError> + '_
+where
+    L: FnMut(&NamespacePrefix) -> Result<NamespaceUri, ParseError>,
+{
+    move |(input, state), _ss| {
         if input.is_empty() {
-            Err(ParseError::Combinator)
+            Err(ParseError::Combinator(String::from("no input")))
         } else {
             let mut ch_it = input.char_indices();
             let (_, a) = ch_it.next().unwrap();
             match s.find(|b| a == b) {
-                Some(_) => Err(ParseError::Combinator),
+                Some(_) => Err(ParseError::Combinator(String::from("found char"))),
                 None => {
                     if let Some((j, _)) = ch_it.next() {
                         Ok(((&input[j..], state), a))
