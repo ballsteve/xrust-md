@@ -1035,9 +1035,9 @@ dependencies = [
 
 [[package]]
 name = "xrust"
-version = "2.0.0"
+version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e2fb88488605fc277ad7b7c122222e3028a82846f94474d2778b0cdb42efe8a3"
+checksum = "c52a5a42daabeda013528d431e1101baa933045c267009d7d2454404b11fa496"
 dependencies = [
  "chrono",
  "english-numbers",
@@ -1056,7 +1056,7 @@ dependencies = [
 
 [[package]]
 name = "xrust-md"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "qualname",
  "xrust",
