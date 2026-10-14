@@ -48,7 +48,9 @@ This crate is used by [χrusty](https://gitlab.gnome.org/World/Rust/markup-rs/xr
 
 | Release | Notes |
 |---------|-------|
-| 0.1.0   | Initial release |
+| 0.2.3   | Synchronise with xrust 2.3.0 |
 |---------|-------|
 | 0.2.0   | Unlimited heading levels |
+|---------|-------|
+| 0.1.0   | Initial release |
 |---------|-------|
