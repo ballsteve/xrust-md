@@ -1118,6 +1118,8 @@ dependencies = [
 [[package]]
 name = "xrust"
 version = "2.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a0e34262700adbb9a5e3c25911572e557925d49db94675f5dbc9c028ee4377a0"
 dependencies = [
  "chrono",
  "english-numbers",

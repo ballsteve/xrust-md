@@ -12,7 +12,5 @@ readme = "README.md"
 edition = "2024"
 
 [dependencies]
-#xrust = "2.3.0"
-xrust = { path = "../xrust" }
+xrust = "2.4.0"
 qualname = "0.0.2"
-#qualname = { path = "../qualname" }
